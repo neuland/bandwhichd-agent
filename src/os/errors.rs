@@ -1,6 +1,5 @@
-use std::fmt;
-
 use failure::{Backtrace, Context, Fail};
+use std::fmt;
 
 #[derive(Debug)]
 pub struct GetInterfaceError {
@@ -20,6 +19,7 @@ impl From<Context<GetInterfaceErrorKind>> for GetInterfaceError {
         GetInterfaceError { inner }
     }
 }
+
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum GetInterfaceErrorKind {
     #[fail(display = "{}", _0)]
@@ -27,6 +27,7 @@ pub enum GetInterfaceErrorKind {
     #[fail(display = "{}", _0)]
     OtherError(String),
 }
+
 impl Fail for GetInterfaceError {
     fn cause(&self) -> Option<&dyn Fail> {
         self.inner.cause()

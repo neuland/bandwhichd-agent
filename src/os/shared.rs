@@ -3,10 +3,8 @@ use ::crossterm::event::Event;
 use ::pnet::datalink::Channel::Ethernet;
 use ::pnet::datalink::DataLinkReceiver;
 use ::pnet::datalink::{self, Config, NetworkInterface};
-use ::std::io::{self, ErrorKind, Write};
-use ::tokio::runtime::Runtime;
+use ::std::io::ErrorKind;
 
-use ::std::net::Ipv4Addr;
 use ::std::time;
 
 use crate::os::errors::GetInterfaceErrorKind;
@@ -18,7 +16,7 @@ use crate::os::lsof::get_open_sockets;
 #[cfg(target_os = "windows")]
 use crate::os::windows::get_open_sockets;
 
-use crate::{network::dns, OsInputOutput};
+use crate::OsInputOutput;
 
 pub struct TerminalEvents;
 
@@ -65,15 +63,6 @@ fn get_interface(interface_name: &str) -> Option<NetworkInterface> {
         .find(|iface| iface.name == interface_name)
 }
 
-fn create_write_to_stdout() -> Box<dyn FnMut(String) + Send> {
-    Box::new({
-        let mut stdout = io::stdout();
-        move |output: String| {
-            writeln!(stdout, "{}", output).unwrap();
-        }
-    })
-}
-
 #[derive(Debug)]
 pub struct UserErrors {
     permission: Option<String>,
@@ -96,31 +85,31 @@ where
         },
         |acc, (_, elem)| {
             if let Some(iface_error) = elem.err() {
-                match iface_error {
+                return match iface_error {
                     GetInterfaceErrorKind::PermissionError(interface_name) => {
                         if let Some(prev_interface) = acc.permission {
-                            return UserErrors {
+                            UserErrors {
                                 permission: Some(format!("{}, {}", prev_interface, interface_name)),
                                 ..acc
-                            };
+                            }
                         } else {
-                            return UserErrors {
+                            UserErrors {
                                 permission: Some(interface_name),
                                 ..acc
-                            };
+                            }
                         }
                     }
                     error => {
                         if let Some(prev_errors) = acc.other {
-                            return UserErrors {
-                                other: Some(format!("{} \n {}", prev_errors, error)),
+                            UserErrors {
+                                other: Some(format!("{} \n {:?}", prev_errors, error)),
                                 ..acc
-                            };
+                            }
                         } else {
-                            return UserErrors {
-                                other: Some(format!("{}", error)),
+                            UserErrors {
+                                other: Some(format!("{:?}", error)),
                                 ..acc
-                            };
+                            }
                         }
                     }
                 };
@@ -147,13 +136,9 @@ where
     }
 }
 
-pub fn get_input(
-    interface_name: &Option<String>,
-    resolve: bool,
-    dns_server: &Option<Ipv4Addr>,
-) -> Result<OsInputOutput, failure::Error> {
+pub fn get_input(interface_name: &Option<String>) -> Result<OsInputOutput, failure::Error> {
     let network_interfaces = if let Some(name) = interface_name {
-        match get_interface(&name) {
+        match get_interface(name) {
             Some(interface) => vec![interface],
             None => {
                 failure::bail!("Cannot find interface {}", name);
@@ -201,31 +186,10 @@ pub fn get_input(
         failure::bail!("Failed to find any network interface to listen on.");
     }
 
-    let keyboard_events = Box::new(TerminalEvents);
-    let write_to_stdout = create_write_to_stdout();
-    let dns_client = if resolve {
-        let mut runtime = Runtime::new()?;
-        let resolver =
-            match runtime.block_on(dns::Resolver::new(runtime.handle().clone(), dns_server)) {
-                Ok(resolver) => resolver,
-                Err(err) => failure::bail!(
-                    "Could not initialize the DNS resolver. Are you offline?\n\nReason: {:?}",
-                    err
-                ),
-            };
-        let dns_client = dns::Client::new(resolver, runtime)?;
-        Some(dns_client)
-    } else {
-        None
-    };
-
     Ok(OsInputOutput {
         network_interfaces,
         network_frames: available_network_frames,
         get_open_sockets,
-        terminal_events: keyboard_events,
-        dns_client,
-        write_to_stdout,
     })
 }
 
@@ -242,9 +206,9 @@ fn eperm_message() -> &'static str {
     Insufficient permissions to listen on network interface(s). You can work around
     this issue like this:
 
-    * Try running `bandwhich` with `sudo`
+    * Try running `bandwhichd-agent` with `sudo`
 
-    * Build a `setcap(8)` wrapper for `bandwhich` with the following rules:
+    * Build a `setcap(8)` wrapper for `bandwhichd-agent` with the following rules:
         `cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep`
     "#
 }
