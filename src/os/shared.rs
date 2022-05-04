@@ -1,5 +1,3 @@
-use ::crossterm::event::read;
-use ::crossterm::event::Event;
 use ::pnet::datalink::Channel::Ethernet;
 use ::pnet::datalink::DataLinkReceiver;
 use ::pnet::datalink::{self, Config, NetworkInterface};
@@ -9,26 +7,9 @@ use ::std::time;
 
 use crate::os::errors::GetInterfaceErrorKind;
 
-#[cfg(target_os = "linux")]
 use crate::os::linux::get_open_sockets;
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-use crate::os::lsof::get_open_sockets;
-#[cfg(target_os = "windows")]
-use crate::os::windows::get_open_sockets;
 
 use crate::OsInputOutput;
-
-pub struct TerminalEvents;
-
-impl Iterator for TerminalEvents {
-    type Item = Event;
-    fn next(&mut self) -> Option<Event> {
-        match read() {
-            Ok(ev) => Some(ev),
-            Err(_) => None,
-        }
-    }
-}
 
 pub(crate) fn get_datalink_channel(
     interface: &NetworkInterface,
@@ -149,12 +130,6 @@ pub fn get_input(interface_name: &Option<String>) -> Result<OsInputOutput, failu
         datalink::interfaces()
     };
 
-    #[cfg(any(target_os = "windows"))]
-    let network_frames = network_interfaces
-        .iter()
-        .filter(|iface| !iface.ips.is_empty())
-        .map(|iface| (iface, get_datalink_channel(iface)));
-    #[cfg(not(target_os = "windows"))]
     let network_frames = network_interfaces
         .iter()
         .filter(|iface| iface.is_up() && !iface.ips.is_empty())
@@ -194,13 +169,6 @@ pub fn get_input(interface_name: &Option<String>) -> Result<OsInputOutput, failu
 }
 
 #[inline]
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-fn eperm_message() -> &'static str {
-    "Insufficient permissions to listen on network interface(s). Try running with sudo."
-}
-
-#[inline]
-#[cfg(target_os = "linux")]
 fn eperm_message() -> &'static str {
     r#"
     Insufficient permissions to listen on network interface(s). You can work around
@@ -211,10 +179,4 @@ fn eperm_message() -> &'static str {
     * Build a `setcap(8)` wrapper for `bandwhichd-agent` with the following rules:
         `cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep`
     "#
-}
-
-#[inline]
-#[cfg(any(target_os = "windows"))]
-fn eperm_message() -> &'static str {
-    "Insufficient permissions to listen on network interface(s). Try running with administrator rights."
 }

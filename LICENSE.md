@@ -1,6 +1,9 @@
 MIT License
 
-Copyright (c) 2019 Aram Drevekenin
+Copyright for portions of project bandwich are held by
+Aram Drevekenin and contributors, 2019 as part of project bandwhichd-agent.
+All other copyright for project bandwhichd-agent are held by
+neuland – Büro für Informatik GmbH, 2022.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

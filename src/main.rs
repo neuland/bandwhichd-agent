@@ -12,22 +12,23 @@ use ::std::sync::{Arc, Mutex};
 use ::std::thread;
 use ::std::thread::park_timeout;
 use ::std::time::{Duration, Instant};
+use clap::Parser;
 use network::{LocalSocket, Sniffer, Utilization};
 use std::process;
-use structopt::StructOpt;
 
 const DEFAULT_PUBLISH_INTERVAL: Duration = Duration::from_secs(10);
 
-#[derive(StructOpt, Debug)]
-#[structopt(name = "bandwhichd-agent")]
+#[derive(Parser)]
+#[clap(version, about, long_about = None)]
+#[clap(propagate_version = true)]
 pub struct Opt {
-    #[structopt(long)]
+    #[clap(long)]
     /// Publish endpoint
     publish_endpoint: String,
-    #[structopt(long)]
+    #[clap(long)]
     /// The network interface to listen on, eg. eth0
     interface: Option<String>,
-    #[structopt(long)]
+    #[clap(long)]
     /// Publish interval in seconds, default is 10
     interval: Option<usize>,
 }
@@ -40,9 +41,8 @@ fn main() {
 }
 
 fn try_main() -> Result<(), failure::Error> {
-    use os::get_input;
-    let opts = Opt::from_args();
-    let os_input = get_input(&opts.interface)?;
+    let opts = Opt::parse();
+    let os_input = os::get_input(&opts.interface)?;
     start(os_input, opts);
     Ok(())
 }
