@@ -4,7 +4,7 @@ mod network;
 mod os;
 mod publish;
 
-use crate::publish::VersionedPublishMessage;
+use crate::publish::VersionedMessage;
 use ::pnet::datalink::{DataLinkReceiver, NetworkInterface};
 use ::std::collections::HashMap;
 use ::std::sync::atomic::{AtomicBool, Ordering};
@@ -86,7 +86,7 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
                         let utilization = { network_utilization.lock().unwrap().clone_and_reset() };
                         let open_sockets = get_open_sockets();
 
-                        let package = VersionedPublishMessage::from(utilization, open_sockets);
+                        let package = VersionedMessage::from(utilization, open_sockets);
                         let publish_result =
                             client.post(publish_endpoint.clone()).json(&package).send();
                         match publish_result {

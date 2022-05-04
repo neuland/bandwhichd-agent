@@ -1,6 +1,7 @@
 use crate::network::{Connection, Direction, Segment};
 
 use ::std::collections::HashMap;
+use std::time::SystemTime;
 
 #[derive(Clone)]
 pub struct ConnectionInfo {
@@ -12,16 +13,25 @@ pub struct ConnectionInfo {
 #[derive(Clone)]
 pub struct Utilization {
     pub connections: HashMap<Connection, ConnectionInfo>,
+    pub start: SystemTime,
+    pub stop: SystemTime,
 }
 
 impl Utilization {
     pub fn new() -> Self {
         let connections = HashMap::new();
-        Utilization { connections }
+        let now = SystemTime::now();
+        Utilization {
+            connections,
+            start: now,
+            stop: now,
+        }
     }
     pub fn clone_and_reset(&mut self) -> Self {
+        self.stop = SystemTime::now();
         let clone = self.clone();
         self.connections.clear();
+        self.start = self.stop;
         clone
     }
     pub fn update(&mut self, seg: Segment) {
