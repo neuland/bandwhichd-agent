@@ -12,13 +12,14 @@ pub enum VersionedMessage {
 }
 
 impl VersionedMessage {
-    pub fn from(utilization: Utilization, open_sockets: OpenSockets) -> Self {
-        VersionedMessage::V1(MessageV1::from(utilization, open_sockets))
+    pub fn from(agent_name: String, utilization: Utilization, open_sockets: OpenSockets) -> Self {
+        VersionedMessage::V1(MessageV1::from(agent_name, utilization, open_sockets))
     }
 }
 
 #[derive(Serialize)]
 pub struct MessageV1 {
+    pub agent_name: String,
     pub start: TimestampV1,
     pub stop: TimestampV1,
     pub connections: Vec<ConnectionV1>,
@@ -26,8 +27,9 @@ pub struct MessageV1 {
 }
 
 impl MessageV1 {
-    pub fn from(utilization: Utilization, open_sockets: OpenSockets) -> Self {
+    pub fn from(agent_name: String, utilization: Utilization, open_sockets: OpenSockets) -> Self {
         MessageV1 {
+            agent_name,
             start: TimestampV1(utilization.start),
             stop: TimestampV1(utilization.stop),
             connections: utilization

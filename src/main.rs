@@ -26,6 +26,9 @@ pub struct Opt {
     /// Publish endpoint
     publish_endpoint: String,
     #[clap(long)]
+    /// The name of this agent to distinguish it from other agents
+    agent_name: String,
+    #[clap(long)]
     /// The network interface to listen on, eg. eth0
     interface: Option<String>,
     #[clap(long)]
@@ -72,7 +75,6 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
             .spawn({
                 let running = running.clone();
                 let network_utilization = network_utilization.clone();
-                let publish_endpoint = opts.publish_endpoint.clone();
                 let publish_interval = opts.interval.map_or_else(
                     || DEFAULT_PUBLISH_INTERVAL,
                     |s| Duration::from_secs(s as u64),
@@ -86,9 +88,15 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
                         let utilization = { network_utilization.lock().unwrap().clone_and_reset() };
                         let open_sockets = get_open_sockets();
 
-                        let package = VersionedMessage::from(utilization, open_sockets);
-                        let publish_result =
-                            client.post(publish_endpoint.clone()).json(&package).send();
+                        let message = VersionedMessage::from(
+                            opts.agent_name.clone(),
+                            utilization,
+                            open_sockets,
+                        );
+                        let publish_result = client
+                            .post(opts.publish_endpoint.clone())
+                            .json(&message)
+                            .send();
                         match publish_result {
                             Ok(response) if response.status() == 200 => {}
                             Ok(response) => println!("Publish error, response: {:?}", response),
