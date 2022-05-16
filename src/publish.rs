@@ -1,3 +1,4 @@
+use pnet::datalink::NetworkInterface;
 use std::net::IpAddr;
 
 use serde::{Serialize, Serializer};
@@ -14,8 +15,18 @@ pub enum VersionedMessage {
 }
 
 impl VersionedMessage {
-    pub fn from(agent_name: String, utilization: Utilization, open_sockets: OpenSockets) -> Self {
-        VersionedMessage::V1(MessageV1::from(agent_name, utilization, open_sockets))
+    pub fn from(
+        agent_name: String,
+        network_interfaces: Vec<NetworkInterface>,
+        utilization: Utilization,
+        open_sockets: OpenSockets,
+    ) -> Self {
+        VersionedMessage::V1(MessageV1::from(
+            agent_name,
+            network_interfaces,
+            utilization,
+            open_sockets,
+        ))
     }
 }
 
@@ -24,12 +35,34 @@ pub struct MessageV1 {
     pub agent_name: String,
     pub start: TimestampV1,
     pub stop: TimestampV1,
+    pub interfaces: Vec<InterfaceV1>,
     pub connections: Vec<ConnectionV1>,
     pub open_sockets: Vec<OpenSocketV1>,
 }
 
 impl MessageV1 {
-    pub fn from(agent_name: String, utilization: Utilization, open_sockets: OpenSockets) -> Self {
+    pub fn from(
+        agent_name: String,
+        network_interfaces: Vec<NetworkInterface>,
+        utilization: Utilization,
+        open_sockets: OpenSockets,
+    ) -> Self {
+        let mut interfaces: Vec<InterfaceV1> = network_interfaces
+            .into_iter()
+            .map(|network_interface| InterfaceV1 {
+                name: network_interface.name.clone(),
+                is_up: network_interface.is_up(),
+                ip_address_ranges: network_interface
+                    .ips
+                    .into_iter()
+                    .map(|ip_network| IpAddressRangeV1 {
+                        ip_address: IpAddressV1(ip_network.ip()),
+                        prefix: ip_network.prefix(),
+                    })
+                    .collect(),
+            })
+            .collect();
+        interfaces.sort();
         let mut connections: Vec<ConnectionV1> = utilization
             .connections
             .into_iter()
@@ -60,6 +93,7 @@ impl MessageV1 {
             agent_name,
             start: TimestampV1(utilization.start.into()),
             stop: TimestampV1(utilization.stop.into()),
+            interfaces,
             connections,
             open_sockets,
         }
@@ -75,6 +109,19 @@ impl Serialize for TimestampV1 {
     {
         time::serde::rfc3339::serialize(&self.0, serializer)
     }
+}
+
+#[derive(Serialize, Ord, PartialOrd, Eq, PartialEq)]
+pub struct InterfaceV1 {
+    pub name: String,
+    pub is_up: bool,
+    pub ip_address_ranges: Vec<IpAddressRangeV1>,
+}
+
+#[derive(Serialize, Ord, PartialOrd, Eq, PartialEq)]
+pub struct IpAddressRangeV1 {
+    pub ip_address: IpAddressV1,
+    pub prefix: u8,
 }
 
 #[derive(Serialize, Ord, PartialOrd, Eq, PartialEq)]
@@ -140,9 +187,11 @@ pub struct OpenSocketV1 {
 mod tests {
     use std::collections::HashMap;
     use std::net::{Ipv4Addr, Ipv6Addr};
+    use std::str::FromStr;
     use std::time::SystemTime;
 
     use assert_json_diff::assert_json_eq;
+    use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
     use serde_json::json;
     use serde_json::{from_str, Value};
     use time::macros::datetime;
@@ -157,6 +206,73 @@ mod tests {
         // given
         let message = VersionedMessage::from(
             "some-host.example.com".to_string(),
+            vec![
+                NetworkInterface {
+                    name: "lo".to_string(),
+                    description: "".to_string(),
+                    index: 0,
+                    mac: None,
+                    ips: vec![
+                        IpNetwork::V4(Ipv4Network::new(Ipv4Addr::LOCALHOST, 8).unwrap()),
+                        IpNetwork::V6(Ipv6Network::new(Ipv6Addr::LOCALHOST, 128).unwrap()),
+                    ],
+                    flags: pnet_sys::IFF_UP as u32,
+                },
+                NetworkInterface {
+                    name: "enp0s31f6".to_string(),
+                    description: "".to_string(),
+                    index: 0,
+                    mac: None,
+                    ips: vec![],
+                    flags: 0,
+                },
+                NetworkInterface {
+                    name: "wlp3s0".to_string(),
+                    description: "".to_string(),
+                    index: 0,
+                    mac: None,
+                    ips: vec![
+                        IpNetwork::V4(
+                            Ipv4Network::new(Ipv4Addr::new(172, 18, 195, 209), 16).unwrap(),
+                        ),
+                        IpNetwork::V6(
+                            Ipv6Network::new(
+                                Ipv6Addr::from_str("fe80::8e71:453d:204d:abf8").unwrap(),
+                                64,
+                            )
+                            .unwrap(),
+                        ),
+                    ],
+                    flags: pnet_sys::IFF_UP as u32,
+                },
+                NetworkInterface {
+                    name: "virbr0".to_string(),
+                    description: "".to_string(),
+                    index: 0,
+                    mac: None,
+                    ips: vec![IpNetwork::V4(
+                        Ipv4Network::new(Ipv4Addr::new(192, 168, 122, 1), 24).unwrap(),
+                    )],
+                    flags: 0,
+                },
+                NetworkInterface {
+                    name: "docker0".to_string(),
+                    description: "".to_string(),
+                    index: 0,
+                    mac: None,
+                    ips: vec![
+                        IpNetwork::V4(Ipv4Network::new(Ipv4Addr::new(172, 17, 0, 1), 16).unwrap()),
+                        IpNetwork::V6(
+                            Ipv6Network::new(
+                                Ipv6Addr::from_str("fe80::42:a4ff:fef2:4ad4").unwrap(),
+                                64,
+                            )
+                            .unwrap(),
+                        ),
+                    ],
+                    flags: 0,
+                },
+            ],
             Utilization {
                 connections: HashMap::from([
                     (
@@ -250,6 +366,65 @@ mod tests {
                 "agent_name": "some-host.example.com",
                 "start": "2022-05-06T15:14:51.74223728Z",
                 "stop": "2022-05-06T15:15:01.74260156Z",
+                "interfaces": [
+                    {
+                        "name": "docker0",
+                        "is_up": false,
+                        "ip_address_ranges": [
+                            {
+                                "ip_address": "172.17.0.1",
+                                "prefix": 16,
+                            },
+                            {
+                                "ip_address": "fe80::42:a4ff:fef2:4ad4",
+                                "prefix": 64,
+                            }
+                        ]
+                    },
+                    {
+                        "name": "enp0s31f6",
+                        "is_up": false,
+                        "ip_address_ranges": [],
+                    },
+                    {
+                        "name": "lo",
+                        "is_up": true,
+                        "ip_address_ranges": [
+                            {
+                                "ip_address": "127.0.0.1",
+                                "prefix": 8
+                            },
+                            {
+                                "ip_address": "::1",
+                                "prefix": 128
+                            },
+                        ],
+                    },
+                    {
+                        "name": "virbr0",
+                        "is_up": false,
+                        "ip_address_ranges": [
+                            {
+                                "ip_address": "192.168.122.1",
+                                "prefix": 24
+                            },
+                        ],
+                    },
+                    {
+                        "name": "wlp3s0",
+                        "is_up": true,
+                        "ip_address_ranges": [
+                            {
+                                "ip_address": "172.18.195.209",
+                                "prefix": 16
+                            },
+                            {
+                                "ip_address": "fe80::8e71:453d:204d:abf8",
+                                "prefix": 64
+                            },
+                        ],
+                    },
+                ],
                 "connections": [
                     {
                         "interface_name": "lo",

@@ -2,7 +2,7 @@
 edition = "2018"
 name = "bandwhichd-agent"
 description = "Publish current network utilization"
-version = "0.24.0"
+version = "0.25.0"
 homepage = "https://github.com/neuland/bandwhichd-agent"
 repository = "https://github.com/neuland/bandwhichd-agent"
 readme = "README.md"
@@ -23,3 +23,4 @@ time = { version = "0.3.9", features = ["macros", "serde-well-known"] }
 
 [dev-dependencies]
 assert-json-diff = "2.0.1"
+pnet_sys = "0.29.0"

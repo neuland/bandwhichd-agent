@@ -70,13 +70,14 @@ dependencies = [
 
 [[package]]
 name = "bandwhichd-agent"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "assert-json-diff",
  "clap",
  "failure",
  "ipnetwork",
  "pnet",
+ "pnet_sys",
  "procfs",
  "reqwest",
  "serde",
