@@ -17,12 +17,14 @@ pub enum VersionedMessage {
 impl VersionedMessage {
     pub fn from(
         agent_name: String,
+        hostname: String,
         network_interfaces: Vec<NetworkInterface>,
         utilization: Utilization,
         open_sockets: OpenSockets,
     ) -> Self {
         VersionedMessage::V1(MessageV1::from(
             agent_name,
+            hostname,
             network_interfaces,
             utilization,
             open_sockets,
@@ -35,6 +37,7 @@ pub struct MessageV1 {
     pub agent_name: String,
     pub start: TimestampV1,
     pub stop: TimestampV1,
+    pub hostname: String,
     pub interfaces: Vec<InterfaceV1>,
     pub connections: Vec<ConnectionV1>,
     pub open_sockets: Vec<OpenSocketV1>,
@@ -43,6 +46,7 @@ pub struct MessageV1 {
 impl MessageV1 {
     pub fn from(
         agent_name: String,
+        hostname: String,
         network_interfaces: Vec<NetworkInterface>,
         utilization: Utilization,
         open_sockets: OpenSockets,
@@ -91,6 +95,7 @@ impl MessageV1 {
         open_sockets.sort();
         MessageV1 {
             agent_name,
+            hostname,
             start: TimestampV1(utilization.start.into()),
             stop: TimestampV1(utilization.stop.into()),
             interfaces,
@@ -205,6 +210,7 @@ mod tests {
     fn should_serialize_v1_json() {
         // given
         let message = VersionedMessage::from(
+            "some-host".to_string(),
             "some-host.example.com".to_string(),
             vec![
                 NetworkInterface {
@@ -363,9 +369,10 @@ mod tests {
         let expected: Value = json!({
             "version": "1",
             "message": {
-                "agent_name": "some-host.example.com",
+                "agent_name": "some-host",
                 "start": "2022-05-06T15:14:51.74223728Z",
                 "stop": "2022-05-06T15:15:01.74260156Z",
+                "hostname": "some-host.example.com",
                 "interfaces": [
                     {
                         "name": "docker0",

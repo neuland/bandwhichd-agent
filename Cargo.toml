@@ -2,7 +2,7 @@
 edition = "2018"
 name = "bandwhichd-agent"
 description = "Publish current network utilization"
-version = "0.25.0"
+version = "0.26.0"
 homepage = "https://github.com/neuland/bandwhichd-agent"
 repository = "https://github.com/neuland/bandwhichd-agent"
 readme = "README.md"
@@ -12,6 +12,7 @@ license = "MIT"
 
 [dependencies]
 failure = "0.1.8"
+gethostname = "0.2.3"
 ipnetwork = "0.18.0"
 pnet = "0.29.0"
 procfs = "0.12.0"

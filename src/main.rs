@@ -90,6 +90,7 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
 
                         let message = VersionedMessage::from(
                             opts.agent_name.clone(),
+                            gethostname::gethostname().into_string().unwrap(),
                             pnet::datalink::interfaces(),
                             utilization,
                             open_sockets,

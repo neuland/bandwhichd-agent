@@ -70,11 +70,12 @@ dependencies = [
 
 [[package]]
 name = "bandwhichd-agent"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "assert-json-diff",
  "clap",
  "failure",
+ "gethostname",
  "ipnetwork",
  "pnet",
  "pnet_sys",
@@ -333,6 +334,16 @@ dependencies = [
  "pin-project-lite",
  "pin-utils",
  "slab",
+]
+
+[[package]]
+name = "gethostname"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1ebd34e35c46e00bb73e81363248d627782724609fe1b6396f553f68fe3862e"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
