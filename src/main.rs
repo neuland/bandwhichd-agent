@@ -1,20 +1,25 @@
 #![deny(clippy::all)]
 
-mod network;
-mod os;
-mod publish;
-
-use crate::publish::VersionedMessage;
-use ::pnet::datalink::{DataLinkReceiver, NetworkInterface};
 use ::std::collections::HashMap;
 use ::std::sync::atomic::{AtomicBool, Ordering};
 use ::std::sync::{Arc, Mutex};
 use ::std::thread;
 use ::std::thread::park_timeout;
 use ::std::time::{Duration, Instant};
-use clap::Parser;
-use network::{LocalSocket, Sniffer, Utilization};
 use std::process;
+
+use ::pnet::datalink::{DataLinkReceiver, NetworkInterface};
+use clap::Parser;
+
+use network::{LocalSocket, Sniffer, Utilization};
+
+use crate::publish::{
+    Message, NetworkConfigurationV1MeasurementMessage, NetworkUtilizationV1MeasurementMessage,
+};
+
+mod network;
+mod os;
+mod publish;
 
 const DEFAULT_PUBLISH_INTERVAL: Duration = Duration::from_secs(10);
 
@@ -86,21 +91,40 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
                         let utilization = { network_utilization.lock().unwrap().clone_and_reset() };
                         let open_sockets = get_open_sockets();
 
-                        let message = VersionedMessage::from(
-                            agent_id,
-                            gethostname::gethostname().into_string().unwrap(),
-                            pnet::datalink::interfaces(),
-                            utilization,
-                            open_sockets,
-                        );
-                        let publish_result = client
-                            .post(opts.publish_endpoint.clone())
-                            .json(&message)
-                            .send();
-                        match publish_result {
-                            Ok(response) if response.status() == 200 => {}
-                            Ok(response) => println!("Publish error, response: {:?}", response),
-                            Err(error) => eprintln!("Publish error, error: {:?}", error),
+                        {
+                            let message = Message::NetworkConfigurationV1Measurement(
+                                NetworkConfigurationV1MeasurementMessage::from(
+                                    agent_id,
+                                    utilization.start,
+                                    gethostname::gethostname().into_string().unwrap(),
+                                    pnet::datalink::interfaces(),
+                                    open_sockets,
+                                ),
+                            );
+                            let publish_result = client
+                                .post(opts.publish_endpoint.clone())
+                                .json(&message)
+                                .send();
+                            match publish_result {
+                                Ok(response) if response.status() == 200 => {}
+                                Ok(response) => println!("Publish error, response: {:?}", response),
+                                Err(error) => eprintln!("Publish error, error: {:?}", error),
+                            }
+                        }
+
+                        {
+                            let message = Message::NetworkUtilizationV1Measurement(
+                                NetworkUtilizationV1MeasurementMessage::from(agent_id, utilization),
+                            );
+                            let publish_result = client
+                                .post(opts.publish_endpoint.clone())
+                                .json(&message)
+                                .send();
+                            match publish_result {
+                                Ok(response) if response.status() == 200 => {}
+                                Ok(response) => println!("Publish error, response: {:?}", response),
+                                Err(error) => eprintln!("Publish error, error: {:?}", error),
+                            }
                         }
 
                         let publish_duration = publish_start_time.elapsed();

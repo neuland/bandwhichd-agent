@@ -1,54 +1,37 @@
-use pnet::datalink::NetworkInterface;
 use std::net::IpAddr;
+use std::time::SystemTime;
 
+use pnet::datalink::NetworkInterface;
 use serde::{Serialize, Serializer};
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 
 use crate::network::Protocol;
 use crate::{OpenSockets, Utilization};
 
 #[derive(Serialize)]
-#[serde(tag = "version", content = "message")]
-pub enum VersionedMessage {
-    #[serde(rename = "1")]
-    V1(MessageV1),
-}
-
-impl VersionedMessage {
-    pub fn from(
-        agent_id: uuid::Uuid,
-        hostname: String,
-        network_interfaces: Vec<NetworkInterface>,
-        utilization: Utilization,
-        open_sockets: OpenSockets,
-    ) -> Self {
-        VersionedMessage::V1(MessageV1::from(
-            agent_id,
-            hostname,
-            network_interfaces,
-            utilization,
-            open_sockets,
-        ))
-    }
+#[serde(tag = "type", content = "content")]
+pub enum Message {
+    #[serde(rename = "bandwhichd/measurement/network-configuration/v1")]
+    NetworkConfigurationV1Measurement(NetworkConfigurationV1MeasurementMessage),
+    #[serde(rename = "bandwhichd/measurement/network-utilization/v1")]
+    NetworkUtilizationV1Measurement(NetworkUtilizationV1MeasurementMessage),
 }
 
 #[derive(Serialize)]
-pub struct MessageV1 {
+pub struct NetworkConfigurationV1MeasurementMessage {
     pub agent_id: AgentId,
-    pub start: TimestampV1,
-    pub stop: TimestampV1,
+    pub timestamp: TimestampV1,
     pub hostname: String,
     pub interfaces: Vec<InterfaceV1>,
-    pub connections: Vec<ConnectionV1>,
     pub open_sockets: Vec<OpenSocketV1>,
 }
 
-impl MessageV1 {
+impl NetworkConfigurationV1MeasurementMessage {
     pub fn from(
         agent_id: uuid::Uuid,
+        timestamp: SystemTime,
         hostname: String,
         network_interfaces: Vec<NetworkInterface>,
-        utilization: Utilization,
         open_sockets: OpenSockets,
     ) -> Self {
         let mut interfaces: Vec<InterfaceV1> = network_interfaces
@@ -67,6 +50,36 @@ impl MessageV1 {
             })
             .collect();
         interfaces.sort();
+        let mut open_sockets: Vec<OpenSocketV1> = open_sockets
+            .sockets_to_procs
+            .into_iter()
+            .map(|(socket, process)| OpenSocketV1 {
+                ip_address: IpAddressV1(socket.ip),
+                port: socket.port,
+                protocol: ProtocolV1(socket.protocol),
+                process,
+            })
+            .collect();
+        open_sockets.sort();
+        NetworkConfigurationV1MeasurementMessage {
+            agent_id: AgentId(agent_id),
+            hostname,
+            timestamp: TimestampV1(timestamp.into()),
+            interfaces,
+            open_sockets,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct NetworkUtilizationV1MeasurementMessage {
+    pub agent_id: AgentId,
+    pub timeframe: TimeframeV1,
+    pub connections: Vec<ConnectionV1>,
+}
+
+impl NetworkUtilizationV1MeasurementMessage {
+    pub fn from(agent_id: uuid::Uuid, utilization: Utilization) -> Self {
         let mut connections: Vec<ConnectionV1> = utilization
             .connections
             .into_iter()
@@ -82,25 +95,15 @@ impl MessageV1 {
             })
             .collect();
         connections.sort();
-        let mut open_sockets: Vec<OpenSocketV1> = open_sockets
-            .sockets_to_procs
-            .into_iter()
-            .map(|(socket, process)| OpenSocketV1 {
-                ip_address: IpAddressV1(socket.ip),
-                port: socket.port,
-                protocol: ProtocolV1(socket.protocol),
-                process,
-            })
-            .collect();
-        open_sockets.sort();
-        MessageV1 {
+        let start: OffsetDateTime = utilization.start.into();
+        let stop: OffsetDateTime = utilization.stop.into();
+        NetworkUtilizationV1MeasurementMessage {
             agent_id: AgentId(agent_id),
-            hostname,
-            start: TimestampV1(utilization.start.into()),
-            stop: TimestampV1(utilization.stop.into()),
-            interfaces,
+            timeframe: TimeframeV1 {
+                start: TimestampV1(start),
+                duration: DurationV1(stop - start),
+            },
             connections,
-            open_sockets,
         }
     }
 }
@@ -116,6 +119,23 @@ impl Serialize for TimestampV1 {
         S: Serializer,
     {
         time::serde::rfc3339::serialize(&self.0, serializer)
+    }
+}
+
+#[derive(Serialize)]
+pub struct TimeframeV1 {
+    pub start: TimestampV1,
+    pub duration: DurationV1,
+}
+
+pub struct DurationV1(Duration);
+
+impl Serialize for DurationV1 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(format!("PT{}S", self.0.as_seconds_f32()).as_str())
     }
 }
 
@@ -210,158 +230,103 @@ mod tests {
     use super::*;
 
     #[test]
-    fn should_serialize_v1_json() {
+    fn should_serialize_network_configuration_v1_measurement_message_json() {
         // given
-        let message = VersionedMessage::from(
-            uuid::uuid!("35ca6820-5d30-4d73-b820-b332a492d058"),
-            "some-host.example.com".to_string(),
-            vec![
-                NetworkInterface {
-                    name: "lo".to_string(),
-                    description: "".to_string(),
-                    index: 0,
-                    mac: None,
-                    ips: vec![
-                        IpNetwork::V4(Ipv4Network::new(Ipv4Addr::LOCALHOST, 8).unwrap()),
-                        IpNetwork::V6(Ipv6Network::new(Ipv6Addr::LOCALHOST, 128).unwrap()),
-                    ],
-                    flags: pnet_sys::IFF_UP as u32,
-                },
-                NetworkInterface {
-                    name: "enp0s31f6".to_string(),
-                    description: "".to_string(),
-                    index: 0,
-                    mac: None,
-                    ips: vec![],
-                    flags: 0,
-                },
-                NetworkInterface {
-                    name: "wlp3s0".to_string(),
-                    description: "".to_string(),
-                    index: 0,
-                    mac: None,
-                    ips: vec![
-                        IpNetwork::V4(
-                            Ipv4Network::new(Ipv4Addr::new(172, 18, 195, 209), 16).unwrap(),
-                        ),
-                        IpNetwork::V6(
-                            Ipv6Network::new(
-                                Ipv6Addr::from_str("fe80::8e71:453d:204d:abf8").unwrap(),
-                                64,
-                            )
-                            .unwrap(),
-                        ),
-                    ],
-                    flags: pnet_sys::IFF_UP as u32,
-                },
-                NetworkInterface {
-                    name: "virbr0".to_string(),
-                    description: "".to_string(),
-                    index: 0,
-                    mac: None,
-                    ips: vec![IpNetwork::V4(
-                        Ipv4Network::new(Ipv4Addr::new(192, 168, 122, 1), 24).unwrap(),
-                    )],
-                    flags: 0,
-                },
-                NetworkInterface {
-                    name: "docker0".to_string(),
-                    description: "".to_string(),
-                    index: 0,
-                    mac: None,
-                    ips: vec![
-                        IpNetwork::V4(Ipv4Network::new(Ipv4Addr::new(172, 17, 0, 1), 16).unwrap()),
-                        IpNetwork::V6(
-                            Ipv6Network::new(
-                                Ipv6Addr::from_str("fe80::42:a4ff:fef2:4ad4").unwrap(),
-                                64,
-                            )
-                            .unwrap(),
-                        ),
-                    ],
-                    flags: 0,
-                },
-            ],
-            Utilization {
-                connections: HashMap::from([
-                    (
-                        Connection {
-                            remote_socket: Socket {
-                                ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                                port: 8080,
-                            },
-                            local_socket: LocalSocket {
-                                ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                                port: 36070,
+        let message = Message::NetworkConfigurationV1Measurement(
+            NetworkConfigurationV1MeasurementMessage::from(
+                uuid::uuid!("35ca6820-5d30-4d73-b820-b332a492d058"),
+                SystemTime::from(datetime!(2022-05-06 15:14:51.74223728 utc)),
+                "some-host.example.com".to_string(),
+                vec![
+                    NetworkInterface {
+                        name: "lo".to_string(),
+                        description: "".to_string(),
+                        index: 0,
+                        mac: None,
+                        ips: vec![
+                            IpNetwork::V4(Ipv4Network::new(Ipv4Addr::LOCALHOST, 8).unwrap()),
+                            IpNetwork::V6(Ipv6Network::new(Ipv6Addr::LOCALHOST, 128).unwrap()),
+                        ],
+                        flags: pnet_sys::IFF_UP as u32,
+                    },
+                    NetworkInterface {
+                        name: "enp0s31f6".to_string(),
+                        description: "".to_string(),
+                        index: 0,
+                        mac: None,
+                        ips: vec![],
+                        flags: 0,
+                    },
+                    NetworkInterface {
+                        name: "wlp3s0".to_string(),
+                        description: "".to_string(),
+                        index: 0,
+                        mac: None,
+                        ips: vec![
+                            IpNetwork::V4(
+                                Ipv4Network::new(Ipv4Addr::new(172, 18, 195, 209), 16).unwrap(),
+                            ),
+                            IpNetwork::V6(
+                                Ipv6Network::new(
+                                    Ipv6Addr::from_str("fe80::8e71:453d:204d:abf8").unwrap(),
+                                    64,
+                                )
+                                .unwrap(),
+                            ),
+                        ],
+                        flags: pnet_sys::IFF_UP as u32,
+                    },
+                    NetworkInterface {
+                        name: "virbr0".to_string(),
+                        description: "".to_string(),
+                        index: 0,
+                        mac: None,
+                        ips: vec![IpNetwork::V4(
+                            Ipv4Network::new(Ipv4Addr::new(192, 168, 122, 1), 24).unwrap(),
+                        )],
+                        flags: 0,
+                    },
+                    NetworkInterface {
+                        name: "docker0".to_string(),
+                        description: "".to_string(),
+                        index: 0,
+                        mac: None,
+                        ips: vec![
+                            IpNetwork::V4(
+                                Ipv4Network::new(Ipv4Addr::new(172, 17, 0, 1), 16).unwrap(),
+                            ),
+                            IpNetwork::V6(
+                                Ipv6Network::new(
+                                    Ipv6Addr::from_str("fe80::42:a4ff:fef2:4ad4").unwrap(),
+                                    64,
+                                )
+                                .unwrap(),
+                            ),
+                        ],
+                        flags: 0,
+                    },
+                ],
+                OpenSockets {
+                    sockets_to_procs: HashMap::from([
+                        (
+                            LocalSocket {
+                                ip: IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
+                                port: 37863,
                                 protocol: Protocol::Tcp,
                             },
-                        },
-                        ConnectionInfo {
-                            interface_name: "lo".to_string(),
-                            total_bytes_downloaded: 0,
-                            total_bytes_uploaded: 13882,
-                        },
-                    ),
-                    (
-                        Connection {
-                            remote_socket: Socket {
-                                ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                                port: 36070,
-                            },
-                            local_socket: LocalSocket {
-                                ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                                port: 8080,
-                                protocol: Protocol::Tcp,
-                            },
-                        },
-                        ConnectionInfo {
-                            interface_name: "lo".to_string(),
-                            total_bytes_downloaded: 608,
-                            total_bytes_uploaded: 0,
-                        },
-                    ),
-                    (
-                        Connection {
-                            remote_socket: Socket {
-                                ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 34)),
-                                port: 5353,
-                            },
-                            local_socket: LocalSocket {
-                                ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 87)),
-                                port: 43254,
+                            "java".to_string(),
+                        ),
+                        (
+                            LocalSocket {
+                                ip: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                                port: 68,
                                 protocol: Protocol::Udp,
                             },
-                        },
-                        ConnectionInfo {
-                            interface_name: "tun0".to_string(),
-                            total_bytes_downloaded: 120,
-                            total_bytes_uploaded: 64,
-                        },
-                    ),
-                ]),
-                start: SystemTime::from(datetime!(2022-05-06 15:14:51.74223728 utc)),
-                stop: SystemTime::from(datetime!(2022-05-06 15:15:01.74260156 utc)),
-            },
-            OpenSockets {
-                sockets_to_procs: HashMap::from([
-                    (
-                        LocalSocket {
-                            ip: IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
-                            port: 37863,
-                            protocol: Protocol::Tcp,
-                        },
-                        "java".to_string(),
-                    ),
-                    (
-                        LocalSocket {
-                            ip: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-                            port: 68,
-                            protocol: Protocol::Udp,
-                        },
-                        "dhclient".to_string(),
-                    ),
-                ]),
-            },
+                            "dhclient".to_string(),
+                        ),
+                    ]),
+                },
+            ),
         );
 
         // when
@@ -370,11 +335,10 @@ mod tests {
         // then
         let actual: Value = from_str(result.unwrap().as_str()).unwrap();
         let expected: Value = json!({
-            "version": "1",
-            "message": {
+            "type": "bandwhichd/measurement/network-configuration/v1",
+            "content": {
                 "agent_id": "35ca6820-5d30-4d73-b820-b332a492d058",
-                "start": "2022-05-06T15:14:51.74223728Z",
-                "stop": "2022-05-06T15:15:01.74260156Z",
+                "timestamp": "2022-05-06T15:14:51.74223728Z",
                 "hostname": "some-host.example.com",
                 "interfaces": [
                     {
@@ -435,6 +399,106 @@ mod tests {
                         ],
                     },
                 ],
+                "open_sockets": [
+                    {
+                        "ip_address": "0.0.0.0",
+                        "port": 68,
+                        "protocol": "udp",
+                        "process": "dhclient"
+                    },
+                    {
+                        "ip_address": "::",
+                        "port": 37863,
+                        "protocol": "tcp",
+                        "process": "java"
+                    }
+                ]
+            }
+        });
+        assert_json_eq!(actual, expected);
+    }
+
+    #[test]
+    fn should_serialize_network_utilization_v1_measurement_message_json() {
+        // given
+        let message =
+            Message::NetworkUtilizationV1Measurement(NetworkUtilizationV1MeasurementMessage::from(
+                uuid::uuid!("35ca6820-5d30-4d73-b820-b332a492d058"),
+                Utilization {
+                    connections: HashMap::from([
+                        (
+                            Connection {
+                                remote_socket: Socket {
+                                    ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                                    port: 8080,
+                                },
+                                local_socket: LocalSocket {
+                                    ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                                    port: 36070,
+                                    protocol: Protocol::Tcp,
+                                },
+                            },
+                            ConnectionInfo {
+                                interface_name: "lo".to_string(),
+                                total_bytes_downloaded: 0,
+                                total_bytes_uploaded: 13882,
+                            },
+                        ),
+                        (
+                            Connection {
+                                remote_socket: Socket {
+                                    ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                                    port: 36070,
+                                },
+                                local_socket: LocalSocket {
+                                    ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                                    port: 8080,
+                                    protocol: Protocol::Tcp,
+                                },
+                            },
+                            ConnectionInfo {
+                                interface_name: "lo".to_string(),
+                                total_bytes_downloaded: 608,
+                                total_bytes_uploaded: 0,
+                            },
+                        ),
+                        (
+                            Connection {
+                                remote_socket: Socket {
+                                    ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 34)),
+                                    port: 5353,
+                                },
+                                local_socket: LocalSocket {
+                                    ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 87)),
+                                    port: 43254,
+                                    protocol: Protocol::Udp,
+                                },
+                            },
+                            ConnectionInfo {
+                                interface_name: "tun0".to_string(),
+                                total_bytes_downloaded: 120,
+                                total_bytes_uploaded: 64,
+                            },
+                        ),
+                    ]),
+                    start: SystemTime::from(datetime!(2022-05-06 15:14:51.74223728 utc)),
+                    stop: SystemTime::from(datetime!(2022-05-06 15:15:01.84260156 utc)),
+                },
+            ));
+
+        // when
+        let result = serde_json::to_string(&message);
+
+        // then
+        let actual: Value = from_str(result.unwrap().as_str()).unwrap();
+        let expected: Value = json!({
+            "type": "bandwhichd/measurement/network-utilization/v1",
+            "content": {
+                "agent_id": "35ca6820-5d30-4d73-b820-b332a492d058",
+                "timeframe": {
+                    "start": "2022-05-06T15:14:51.74223728Z",
+                    "duration": "PT10.100365S"
+                },
                 "connections": [
                     {
                         "interface_name": "lo",
@@ -467,20 +531,6 @@ mod tests {
                         "sent": "64"
                     }
                 ],
-                "open_sockets": [
-                    {
-                        "ip_address": "0.0.0.0",
-                        "port": 68,
-                        "protocol": "udp",
-                        "process": "dhclient"
-                    },
-                    {
-                        "ip_address": "::",
-                        "port": 37863,
-                        "protocol": "tcp",
-                        "process": "java"
-                    }
-                ]
             }
         });
         assert_json_eq!(actual, expected);
