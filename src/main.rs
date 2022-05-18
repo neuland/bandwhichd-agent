@@ -26,9 +26,6 @@ pub struct Opt {
     /// Publish endpoint
     publish_endpoint: String,
     #[clap(long)]
-    /// The name of this agent to distinguish it from other agents
-    agent_name: String,
-    #[clap(long)]
     /// The network interface to listen on, eg. eth0
     interface: Option<String>,
     #[clap(long)]
@@ -61,6 +58,7 @@ pub struct OsInputOutput {
 }
 
 pub fn start(os_input: OsInputOutput, opts: Opt) {
+    let agent_id = uuid::Uuid::new_v4();
     let running = Arc::new(AtomicBool::new(true));
 
     let mut active_threads = vec![];
@@ -89,7 +87,7 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
                         let open_sockets = get_open_sockets();
 
                         let message = VersionedMessage::from(
-                            opts.agent_name.clone(),
+                            agent_id,
                             gethostname::gethostname().into_string().unwrap(),
                             pnet::datalink::interfaces(),
                             utilization,

@@ -16,14 +16,14 @@ pub enum VersionedMessage {
 
 impl VersionedMessage {
     pub fn from(
-        agent_name: String,
+        agent_id: uuid::Uuid,
         hostname: String,
         network_interfaces: Vec<NetworkInterface>,
         utilization: Utilization,
         open_sockets: OpenSockets,
     ) -> Self {
         VersionedMessage::V1(MessageV1::from(
-            agent_name,
+            agent_id,
             hostname,
             network_interfaces,
             utilization,
@@ -34,7 +34,7 @@ impl VersionedMessage {
 
 #[derive(Serialize)]
 pub struct MessageV1 {
-    pub agent_name: String,
+    pub agent_id: AgentId,
     pub start: TimestampV1,
     pub stop: TimestampV1,
     pub hostname: String,
@@ -45,7 +45,7 @@ pub struct MessageV1 {
 
 impl MessageV1 {
     pub fn from(
-        agent_name: String,
+        agent_id: uuid::Uuid,
         hostname: String,
         network_interfaces: Vec<NetworkInterface>,
         utilization: Utilization,
@@ -94,7 +94,7 @@ impl MessageV1 {
             .collect();
         open_sockets.sort();
         MessageV1 {
-            agent_name,
+            agent_id: AgentId(agent_id),
             hostname,
             start: TimestampV1(utilization.start.into()),
             stop: TimestampV1(utilization.stop.into()),
@@ -104,6 +104,9 @@ impl MessageV1 {
         }
     }
 }
+
+#[derive(Serialize)]
+pub struct AgentId(uuid::Uuid);
 
 pub struct TimestampV1(OffsetDateTime);
 
@@ -210,7 +213,7 @@ mod tests {
     fn should_serialize_v1_json() {
         // given
         let message = VersionedMessage::from(
-            "some-host".to_string(),
+            uuid::uuid!("35ca6820-5d30-4d73-b820-b332a492d058"),
             "some-host.example.com".to_string(),
             vec![
                 NetworkInterface {
@@ -369,7 +372,7 @@ mod tests {
         let expected: Value = json!({
             "version": "1",
             "message": {
-                "agent_name": "some-host",
+                "agent_id": "35ca6820-5d30-4d73-b820-b332a492d058",
                 "start": "2022-05-06T15:14:51.74223728Z",
                 "stop": "2022-05-06T15:15:01.74260156Z",
                 "hostname": "some-host.example.com",
