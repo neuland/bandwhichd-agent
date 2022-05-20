@@ -1,14 +1,12 @@
-use ::pnet::datalink::Channel::Ethernet;
-use ::pnet::datalink::DataLinkReceiver;
-use ::pnet::datalink::{self, Config, NetworkInterface};
-use ::std::io::ErrorKind;
+use std::io::ErrorKind;
+use std::time;
 
-use ::std::time;
+use pnet::datalink::Channel::Ethernet;
+use pnet::datalink::DataLinkReceiver;
+use pnet::datalink::{self, Config, NetworkInterface};
 
 use crate::os::errors::GetInterfaceErrorKind;
-
 use crate::os::linux::get_open_sockets;
-
 use crate::OsInputOutput;
 
 pub(crate) fn get_datalink_channel(
@@ -36,12 +34,6 @@ pub(crate) fn get_datalink_channel(
             ))),
         },
     }
-}
-
-fn get_interface(interface_name: &str) -> Option<NetworkInterface> {
-    datalink::interfaces()
-        .into_iter()
-        .find(|iface| iface.name == interface_name)
 }
 
 #[derive(Debug)]
@@ -117,18 +109,8 @@ where
     }
 }
 
-pub fn get_input(interface_name: &Option<String>) -> Result<OsInputOutput, failure::Error> {
-    let network_interfaces = if let Some(name) = interface_name {
-        match get_interface(name) {
-            Some(interface) => vec![interface],
-            None => {
-                failure::bail!("Cannot find interface {}", name);
-                // the homebrew formula relies on this wording, please be careful when changing
-            }
-        }
-    } else {
-        datalink::interfaces()
-    };
+pub fn get_input() -> Result<OsInputOutput, failure::Error> {
+    let network_interfaces = datalink::interfaces();
 
     let network_frames = network_interfaces
         .iter()

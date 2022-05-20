@@ -1,13 +1,5 @@
 #![deny(clippy::all)]
 
-use crate::agent_id::AgentId;
-use crate::machine_id::MachineId;
-use crate::network::{LocalSocket, Sniffer, Utilization};
-use crate::publish::{
-    Message, NetworkConfigurationV1MeasurementMessage, NetworkUtilizationV1MeasurementMessage,
-};
-use clap::Parser;
-use pnet::datalink::{DataLinkReceiver, NetworkInterface};
 use std::collections::HashMap;
 use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,6 +7,16 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::park_timeout;
 use std::time::{Duration, Instant, SystemTime};
+
+use clap::Parser;
+use pnet::datalink::{DataLinkReceiver, NetworkInterface};
+
+use crate::agent_id::AgentId;
+use crate::machine_id::MachineId;
+use crate::network::{LocalSocket, Sniffer, Utilization};
+use crate::publish::{
+    Message, NetworkConfigurationV1MeasurementMessage, NetworkUtilizationV1MeasurementMessage,
+};
 
 mod agent_id;
 mod machine_id;
@@ -32,9 +34,6 @@ pub struct Opt {
     #[clap(long)]
     /// Publish endpoint
     publish_endpoint: String,
-    #[clap(long)]
-    /// The network interface to listen on, eg. eth0
-    interface: Option<String>,
 }
 
 fn main() {
@@ -46,7 +45,7 @@ fn main() {
 
 fn try_main() -> Result<(), failure::Error> {
     let opts = Opt::parse();
-    let os_input = os::get_input(&opts.interface)?;
+    let os_input = os::get_input()?;
     start(os_input, opts);
     Ok(())
 }
