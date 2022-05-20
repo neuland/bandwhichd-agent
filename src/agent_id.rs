@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct AgentId {
     raw_value: Uuid,
 }

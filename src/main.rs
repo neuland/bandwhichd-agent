@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::park_timeout;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 mod agent_id;
 mod machine_id;
@@ -22,7 +22,8 @@ mod network;
 mod os;
 mod publish;
 
-const DEFAULT_PUBLISH_INTERVAL: Duration = Duration::from_secs(10);
+const DEFAULT_NETWORK_CONFIGURATION_PUBLISH_INTERVAL: Duration = Duration::from_secs(600);
+const DEFAULT_NETWORK_UTILIZATION_PUBLISH_INTERVAL: Duration = Duration::from_secs(10);
 
 #[derive(Parser)]
 #[clap(version, about, long_about = None)]
@@ -34,9 +35,6 @@ pub struct Opt {
     #[clap(long)]
     /// The network interface to listen on, eg. eth0
     interface: Option<String>,
-    #[clap(long)]
-    /// Publish interval in seconds, default is 10
-    interval: Option<usize>,
 }
 
 fn main() {
@@ -76,38 +74,32 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
 
     active_threads.push(
         thread::Builder::new()
-            .name("publish_handler".to_string())
+            .name("publish_network_configuration_handler".to_string())
             .spawn({
                 let running = running.clone();
-                let network_utilization = network_utilization.clone();
-                let publish_interval = opts.interval.map_or_else(
-                    || DEFAULT_PUBLISH_INTERVAL,
-                    |s| Duration::from_secs(s as u64),
-                );
+                let publish_interval = DEFAULT_NETWORK_CONFIGURATION_PUBLISH_INTERVAL;
+                let publish_endpoint = opts.publish_endpoint.clone();
 
                 let client = reqwest::blocking::Client::new();
 
                 move || {
                     while running.load(Ordering::Acquire) {
                         let publish_start_time = Instant::now();
-                        let utilization = { network_utilization.lock().unwrap().clone_and_reset() };
                         let open_sockets = get_open_sockets();
 
                         {
                             let message = Message::NetworkConfigurationV1Measurement(
                                 NetworkConfigurationV1MeasurementMessage::from(
-                                    agent_id.clone(),
-                                    utilization.start,
+                                    agent_id,
+                                    SystemTime::now(),
                                     machine_id.clone(),
                                     gethostname::gethostname().into_string().unwrap(),
                                     pnet::datalink::interfaces(),
                                     open_sockets,
                                 ),
                             );
-                            let publish_result = client
-                                .post(opts.publish_endpoint.clone())
-                                .json(&message)
-                                .send();
+                            let publish_result =
+                                client.post(publish_endpoint.clone()).json(&message).send();
                             match publish_result {
                                 Ok(response) if response.status() == 200 => {}
                                 Ok(response) => println!("Publish error, response: {:?}", response),
@@ -115,17 +107,39 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
                             }
                         }
 
+                        let publish_duration = publish_start_time.elapsed();
+                        if publish_duration < publish_interval {
+                            park_timeout(publish_interval - publish_duration);
+                        }
+                    }
+                }
+            })
+            .unwrap(),
+    );
+
+    active_threads.push(
+        thread::Builder::new()
+            .name("publish_network_utilization_handler".to_string())
+            .spawn({
+                let running = running.clone();
+                let network_utilization = network_utilization.clone();
+                let publish_interval = DEFAULT_NETWORK_UTILIZATION_PUBLISH_INTERVAL;
+                let publish_endpoint = opts.publish_endpoint;
+
+                let client = reqwest::blocking::Client::new();
+
+                move || {
+                    park_timeout(publish_interval);
+                    while running.load(Ordering::Acquire) {
+                        let publish_start_time = Instant::now();
+                        let utilization = { network_utilization.lock().unwrap().clone_and_reset() };
+
                         {
                             let message = Message::NetworkUtilizationV1Measurement(
-                                NetworkUtilizationV1MeasurementMessage::from(
-                                    agent_id.clone(),
-                                    utilization,
-                                ),
+                                NetworkUtilizationV1MeasurementMessage::from(agent_id, utilization),
                             );
-                            let publish_result = client
-                                .post(opts.publish_endpoint.clone())
-                                .json(&message)
-                                .send();
+                            let publish_result =
+                                client.post(publish_endpoint.clone()).json(&message).send();
                             match publish_result {
                                 Ok(response) if response.status() == 200 => {}
                                 Ok(response) => println!("Publish error, response: {:?}", response),
