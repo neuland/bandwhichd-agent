@@ -6,7 +6,7 @@ use serde::{Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
 
 use crate::network::Protocol;
-use crate::{OpenSockets, Utilization};
+use crate::{AgentId, MachineId, OpenSockets, Utilization};
 
 #[derive(Serialize)]
 #[serde(tag = "type", content = "content")]
@@ -21,6 +21,7 @@ pub enum Message {
 pub struct NetworkConfigurationV1MeasurementMessage {
     pub agent_id: AgentId,
     pub timestamp: TimestampV1,
+    pub machine_id: MachineId,
     pub hostname: String,
     pub interfaces: Vec<InterfaceV1>,
     pub open_sockets: Vec<OpenSocketV1>,
@@ -28,8 +29,9 @@ pub struct NetworkConfigurationV1MeasurementMessage {
 
 impl NetworkConfigurationV1MeasurementMessage {
     pub fn from(
-        agent_id: uuid::Uuid,
+        agent_id: AgentId,
         timestamp: SystemTime,
+        machine_id: MachineId,
         hostname: String,
         network_interfaces: Vec<NetworkInterface>,
         open_sockets: OpenSockets,
@@ -62,8 +64,9 @@ impl NetworkConfigurationV1MeasurementMessage {
             .collect();
         open_sockets.sort();
         NetworkConfigurationV1MeasurementMessage {
-            agent_id: AgentId(agent_id),
+            agent_id,
             hostname,
+            machine_id,
             timestamp: TimestampV1(timestamp.into()),
             interfaces,
             open_sockets,
@@ -79,7 +82,7 @@ pub struct NetworkUtilizationV1MeasurementMessage {
 }
 
 impl NetworkUtilizationV1MeasurementMessage {
-    pub fn from(agent_id: uuid::Uuid, utilization: Utilization) -> Self {
+    pub fn from(agent_id: AgentId, utilization: Utilization) -> Self {
         let mut connections: Vec<ConnectionV1> = utilization
             .connections
             .into_iter()
@@ -98,7 +101,7 @@ impl NetworkUtilizationV1MeasurementMessage {
         let start: OffsetDateTime = utilization.start.into();
         let stop: OffsetDateTime = utilization.stop.into();
         NetworkUtilizationV1MeasurementMessage {
-            agent_id: AgentId(agent_id),
+            agent_id,
             timeframe: TimeframeV1 {
                 start: TimestampV1(start),
                 duration: DurationV1(stop - start),
@@ -108,8 +111,14 @@ impl NetworkUtilizationV1MeasurementMessage {
     }
 }
 
-#[derive(Serialize)]
-pub struct AgentId(uuid::Uuid);
+impl Serialize for AgentId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.raw_value().serialize(serializer)
+    }
+}
 
 pub struct TimestampV1(OffsetDateTime);
 
@@ -136,6 +145,15 @@ impl Serialize for DurationV1 {
         S: Serializer,
     {
         serializer.serialize_str(format!("PT{}S", self.0.as_seconds_f32()).as_str())
+    }
+}
+
+impl Serialize for MachineId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.secure_uuid().serialize(serializer)
     }
 }
 
@@ -223,6 +241,7 @@ mod tests {
     use serde_json::json;
     use serde_json::{from_str, Value};
     use time::macros::datetime;
+    use uuid::uuid;
 
     use crate::network::{Connection, ConnectionInfo, Socket};
     use crate::LocalSocket;
@@ -234,8 +253,9 @@ mod tests {
         // given
         let message = Message::NetworkConfigurationV1Measurement(
             NetworkConfigurationV1MeasurementMessage::from(
-                uuid::uuid!("35ca6820-5d30-4d73-b820-b332a492d058"),
+                AgentId::new(uuid!("35ca6820-5d30-4d73-b820-b332a492d058")),
                 SystemTime::from(datetime!(2022-05-06 15:14:51.74223728 utc)),
+                MachineId::new("<machine-id>".to_string()),
                 "some-host.example.com".to_string(),
                 vec![
                     NetworkInterface {
@@ -339,6 +359,7 @@ mod tests {
             "content": {
                 "agent_id": "35ca6820-5d30-4d73-b820-b332a492d058",
                 "timestamp": "2022-05-06T15:14:51.74223728Z",
+                "machine_id": "d2c1d575-326e-b00b-c3eb-26ef934301f0",
                 "hostname": "some-host.example.com",
                 "interfaces": [
                     {
@@ -423,7 +444,7 @@ mod tests {
         // given
         let message =
             Message::NetworkUtilizationV1Measurement(NetworkUtilizationV1MeasurementMessage::from(
-                uuid::uuid!("35ca6820-5d30-4d73-b820-b332a492d058"),
+                AgentId::new(uuid!("35ca6820-5d30-4d73-b820-b332a492d058")),
                 Utilization {
                     connections: HashMap::from([
                         (

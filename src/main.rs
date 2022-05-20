@@ -1,22 +1,23 @@
 #![deny(clippy::all)]
 
-use ::std::collections::HashMap;
-use ::std::sync::atomic::{AtomicBool, Ordering};
-use ::std::sync::{Arc, Mutex};
-use ::std::thread;
-use ::std::thread::park_timeout;
-use ::std::time::{Duration, Instant};
-use std::process;
-
-use ::pnet::datalink::{DataLinkReceiver, NetworkInterface};
-use clap::Parser;
-
-use network::{LocalSocket, Sniffer, Utilization};
-
+use crate::agent_id::AgentId;
+use crate::machine_id::MachineId;
+use crate::network::{LocalSocket, Sniffer, Utilization};
 use crate::publish::{
     Message, NetworkConfigurationV1MeasurementMessage, NetworkUtilizationV1MeasurementMessage,
 };
+use clap::Parser;
+use pnet::datalink::{DataLinkReceiver, NetworkInterface};
+use std::collections::HashMap;
+use std::process;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::thread::park_timeout;
+use std::time::{Duration, Instant};
 
+mod agent_id;
+mod machine_id;
 mod network;
 mod os;
 mod publish;
@@ -63,7 +64,8 @@ pub struct OsInputOutput {
 }
 
 pub fn start(os_input: OsInputOutput, opts: Opt) {
-    let agent_id = uuid::Uuid::new_v4();
+    let agent_id = AgentId::default();
+    let machine_id = MachineId::default();
     let running = Arc::new(AtomicBool::new(true));
 
     let mut active_threads = vec![];
@@ -94,8 +96,9 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
                         {
                             let message = Message::NetworkConfigurationV1Measurement(
                                 NetworkConfigurationV1MeasurementMessage::from(
-                                    agent_id,
+                                    agent_id.clone(),
                                     utilization.start,
+                                    machine_id.clone(),
                                     gethostname::gethostname().into_string().unwrap(),
                                     pnet::datalink::interfaces(),
                                     open_sockets,
@@ -114,7 +117,10 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
 
                         {
                             let message = Message::NetworkUtilizationV1Measurement(
-                                NetworkUtilizationV1MeasurementMessage::from(agent_id, utilization),
+                                NetworkUtilizationV1MeasurementMessage::from(
+                                    agent_id.clone(),
+                                    utilization,
+                                ),
                             );
                             let publish_result = client
                                 .post(opts.publish_endpoint.clone())
