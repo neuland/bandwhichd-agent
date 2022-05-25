@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter, Write};
 use std::net::IpAddr;
 use std::time::SystemTime;
 
@@ -122,6 +123,18 @@ impl Serialize for AgentId {
 
 pub struct TimestampV1(OffsetDateTime);
 
+impl Display for TimestampV1 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(
+            self.0
+                .format(&time::format_description::well_known::Rfc3339)
+                .map_err(|_| std::fmt::Error)?
+                .as_str(),
+            f,
+        )
+    }
+}
+
 impl Serialize for TimestampV1 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -131,20 +144,36 @@ impl Serialize for TimestampV1 {
     }
 }
 
-#[derive(Serialize)]
 pub struct TimeframeV1 {
     pub start: TimestampV1,
     pub duration: DurationV1,
 }
 
-pub struct DurationV1(Duration);
+impl Display for TimeframeV1 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.start.fmt(f)?;
+        f.write_char('/')?;
+        self.duration.fmt(f)
+    }
+}
 
-impl Serialize for DurationV1 {
+impl Serialize for TimeframeV1 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        serializer.serialize_str(format!("PT{}S", self.0.as_seconds_f32()).as_str())
+        serializer.serialize_str(self.to_string().as_str())
+    }
+}
+
+pub struct DurationV1(Duration);
+
+impl Display for DurationV1 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_char('P')?;
+        f.write_char('T')?;
+        Display::fmt(&self.0.as_seconds_f32(), f)?;
+        f.write_char('S')
     }
 }
 
@@ -516,10 +545,7 @@ mod tests {
             "type": "bandwhichd/measurement/network-utilization/v1",
             "content": {
                 "agent_id": "35ca6820-5d30-4d73-b820-b332a492d058",
-                "timeframe": {
-                    "start": "2022-05-06T15:14:51.74223728Z",
-                    "duration": "PT10.100365S"
-                },
+                "timeframe": "2022-05-06T15:14:51.74223728Z/PT10.100365S",
                 "connections": [
                     {
                         "interface_name": "lo",

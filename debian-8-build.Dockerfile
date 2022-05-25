@@ -1,3 +1,7 @@
+# docker image build --file debian-8-build.Dockerfile --tag bandwhichd-agent:debian-8 .
+# docker container create --name bandwhichd-agent-debian-8 bandwhichd-agent:debian-8
+# docker container cp bandwhichd-agent-debian-8:/home/build/target/release/bandwhichd-agent ./bandwhichd-agent.debian-8
+
 FROM debian:8-slim
 RUN set -eux; \
     apt update; \
