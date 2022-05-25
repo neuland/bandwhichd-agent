@@ -24,11 +24,23 @@ pub struct Socket {
     pub port: u16,
 }
 
+impl From<Socket> for SocketAddr {
+    fn from(socket: Socket) -> Self {
+        SocketAddr::new(socket.ip, socket.port)
+    }
+}
+
 #[derive(PartialEq, Hash, Eq, Clone, PartialOrd, Ord, Debug, Copy)]
 pub struct LocalSocket {
     pub ip: IpAddr,
     pub port: u16,
     pub protocol: Protocol,
+}
+
+impl From<LocalSocket> for SocketAddr {
+    fn from(local_socket: LocalSocket) -> Self {
+        SocketAddr::new(local_socket.ip, local_socket.port)
+    }
 }
 
 #[derive(PartialEq, Hash, Eq, Clone, PartialOrd, Ord, Debug, Copy)]

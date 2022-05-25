@@ -1,7 +1,8 @@
 use std::fmt::{Display, Formatter, Write};
-use std::net::IpAddr;
+use std::net::SocketAddr;
 use std::time::SystemTime;
 
+use ipnetwork::IpNetwork;
 use pnet::datalink::NetworkInterface;
 use serde::{Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
@@ -42,14 +43,7 @@ impl NetworkConfigurationV1MeasurementMessage {
             .map(|network_interface| InterfaceV1 {
                 name: network_interface.name.clone(),
                 is_up: network_interface.is_up(),
-                ip_address_ranges: network_interface
-                    .ips
-                    .into_iter()
-                    .map(|ip_network| IpAddressRangeV1 {
-                        ip_address: IpAddressV1(ip_network.ip()),
-                        prefix: ip_network.prefix(),
-                    })
-                    .collect(),
+                networks: network_interface.ips,
             })
             .collect();
         interfaces.sort();
@@ -57,8 +51,7 @@ impl NetworkConfigurationV1MeasurementMessage {
             .sockets_to_procs
             .into_iter()
             .map(|(socket, process)| OpenSocketV1 {
-                ip_address: IpAddressV1(socket.ip),
-                port: socket.port,
+                socket_address: socket.into(),
                 protocol: ProtocolV1(socket.protocol),
                 process,
             })
@@ -89,10 +82,8 @@ impl NetworkUtilizationV1MeasurementMessage {
             .into_iter()
             .map(|(connection, connection_info)| ConnectionV1 {
                 interface_name: connection_info.interface_name,
-                local_ip_address: IpAddressV1(connection.local_socket.ip),
-                local_port: connection.local_socket.port,
-                remote_ip_address: IpAddressV1(connection.remote_socket.ip),
-                remote_port: connection.remote_socket.port,
+                local_socket_address: connection.local_socket.into(),
+                remote_socket_address: connection.remote_socket.into(),
                 protocol: ProtocolV1(connection.local_socket.protocol),
                 received: BytesCount(connection_info.total_bytes_downloaded),
                 sent: BytesCount(connection_info.total_bytes_uploaded),
@@ -190,37 +181,17 @@ impl Serialize for MachineId {
 pub struct InterfaceV1 {
     pub name: String,
     pub is_up: bool,
-    pub ip_address_ranges: Vec<IpAddressRangeV1>,
-}
-
-#[derive(Serialize, Ord, PartialOrd, Eq, PartialEq)]
-pub struct IpAddressRangeV1 {
-    pub ip_address: IpAddressV1,
-    pub prefix: u8,
+    pub networks: Vec<IpNetwork>,
 }
 
 #[derive(Serialize, Ord, PartialOrd, Eq, PartialEq)]
 pub struct ConnectionV1 {
     pub interface_name: String,
-    pub local_ip_address: IpAddressV1,
-    pub local_port: u16,
-    pub remote_ip_address: IpAddressV1,
-    pub remote_port: u16,
+    pub local_socket_address: SocketAddr,
+    pub remote_socket_address: SocketAddr,
     pub protocol: ProtocolV1,
     pub received: BytesCount,
     pub sent: BytesCount,
-}
-
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
-pub struct IpAddressV1(IpAddr);
-
-impl Serialize for IpAddressV1 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(self.0.to_string().as_str())
-    }
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
@@ -252,8 +223,7 @@ impl Serialize for BytesCount {
 
 #[derive(Serialize, Ord, PartialOrd, Eq, PartialEq)]
 pub struct OpenSocketV1 {
-    pub ip_address: IpAddressV1,
-    pub port: u16,
+    pub socket_address: SocketAddr,
     pub protocol: ProtocolV1,
     pub process: String,
 }
@@ -261,7 +231,7 @@ pub struct OpenSocketV1 {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::net::{Ipv4Addr, Ipv6Addr};
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     use std::str::FromStr;
     use std::time::SystemTime;
 
@@ -394,71 +364,48 @@ mod tests {
                     {
                         "name": "docker0",
                         "is_up": false,
-                        "ip_address_ranges": [
-                            {
-                                "ip_address": "172.17.0.1",
-                                "prefix": 16,
-                            },
-                            {
-                                "ip_address": "fe80::42:a4ff:fef2:4ad4",
-                                "prefix": 64,
-                            }
+                        "networks": [
+                            "172.17.0.1/16",
+                            "fe80::42:a4ff:fef2:4ad4/64",
                         ]
                     },
                     {
                         "name": "enp0s31f6",
                         "is_up": false,
-                        "ip_address_ranges": [],
+                        "networks": [],
                     },
                     {
                         "name": "lo",
                         "is_up": true,
-                        "ip_address_ranges": [
-                            {
-                                "ip_address": "127.0.0.1",
-                                "prefix": 8
-                            },
-                            {
-                                "ip_address": "::1",
-                                "prefix": 128
-                            },
+                        "networks": [
+                            "127.0.0.1/8",
+                            "::1/128",
                         ],
                     },
                     {
                         "name": "virbr0",
                         "is_up": false,
-                        "ip_address_ranges": [
-                            {
-                                "ip_address": "192.168.122.1",
-                                "prefix": 24
-                            },
+                        "networks": [
+                            "192.168.122.1/24",
                         ],
                     },
                     {
                         "name": "wlp3s0",
                         "is_up": true,
-                        "ip_address_ranges": [
-                            {
-                                "ip_address": "172.18.195.209",
-                                "prefix": 16
-                            },
-                            {
-                                "ip_address": "fe80::8e71:453d:204d:abf8",
-                                "prefix": 64
-                            },
+                        "networks": [
+                            "172.18.195.209/16",
+                            "fe80::8e71:453d:204d:abf8/64",
                         ],
                     },
                 ],
                 "open_sockets": [
                     {
-                        "ip_address": "0.0.0.0",
-                        "port": 68,
+                        "socket_address": "0.0.0.0:68",
                         "protocol": "udp",
                         "process": "dhclient"
                     },
                     {
-                        "ip_address": "::",
-                        "port": 37863,
+                        "socket_address": "[::]:37863",
                         "protocol": "tcp",
                         "process": "java"
                     }
@@ -549,30 +496,24 @@ mod tests {
                 "connections": [
                     {
                         "interface_name": "lo",
-                        "local_ip_address": "127.0.0.1",
-                        "local_port": 8080,
-                        "remote_ip_address": "127.0.0.1",
-                        "remote_port": 36070,
+                        "local_socket_address": "127.0.0.1:8080",
+                        "remote_socket_address": "127.0.0.1:36070",
                         "protocol": "tcp",
                         "received": "608",
                         "sent": "0"
                     },
                     {
                         "interface_name": "lo",
-                        "local_ip_address": "127.0.0.1",
-                        "local_port": 36070,
-                        "remote_ip_address": "127.0.0.1",
-                        "remote_port": 8080,
+                        "local_socket_address": "127.0.0.1:36070",
+                        "remote_socket_address": "127.0.0.1:8080",
                         "protocol": "tcp",
                         "received": "0",
                         "sent": "13882"
                     },
                     {
                         "interface_name": "tun0",
-                        "local_ip_address": "192.168.10.87",
-                        "local_port": 43254,
-                        "remote_ip_address": "192.168.10.34",
-                        "remote_port": 5353,
+                        "local_socket_address": "192.168.10.87:43254",
+                        "remote_socket_address": "192.168.10.34:5353",
                         "protocol": "udp",
                         "received": "120",
                         "sent": "64"
