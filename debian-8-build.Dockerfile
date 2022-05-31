@@ -1,12 +1,8 @@
-# docker image build --file debian-8-build.Dockerfile --tag bandwhichd-agent:debian-8 .
-# docker container create --name bandwhichd-agent-debian-8 bandwhichd-agent:debian-8
-# docker container cp bandwhichd-agent-debian-8:/home/build/target/release/bandwhichd-agent ./bandwhichd-agent.debian-8
-
-FROM debian:8-slim
+FROM debian:8-slim AS build
 RUN set -eux; \
     apt update; \
-    apt upgrade -y; \
-    apt install -y \
+    apt upgrade --yes; \
+    apt install --yes --no-install-recommends \
     apt-utils \
     bash \
     build-essential \
@@ -31,7 +27,26 @@ ADD --chown=build:build https://static.rust-lang.org/rustup/dist/x86_64-unknown-
 RUN set -eux; \
     chmod 755 ./rustup-init; \
     ./rustup-init -y
-COPY --chown=build:build . ./
+COPY --chown=build:build src ./src/
+COPY --chown=build:build Cargo.lock ./Cargo.lock
+COPY --chown=build:build Cargo.toml ./Cargo.toml
 RUN set -eux; \
     . ./.cargo/env; \
     cargo build --package bandwhichd-agent --bin bandwhichd-agent --release
+
+FROM debian:8-slim AS package
+RUN set -eux; \
+    apt update; \
+    apt upgrade --yes; \
+    apt install --yes --no-install-recommends \
+    lintian \
+    ;
+COPY --chown=root:root --from=build /home/build/target/release/bandwhichd-agent ./bandwhichd-agent/usr/sbin/bandwhichd-agent
+COPY --chown=root:root packaging/debian/files/ ./bandwhichd-agent
+RUN dpkg-deb --build ./bandwhichd-agent
+RUN lintian  \
+    --allow-root  \
+    --info  \
+    --suppress-tags binary-without-manpage  \
+    --suppress-tags debian-changelog-file-missing  \
+    bandwhichd-agent.deb

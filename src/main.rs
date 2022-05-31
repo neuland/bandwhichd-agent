@@ -64,6 +64,7 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
     let agent_id = AgentId::default();
     let machine_id = MachineId::default();
     let running = Arc::new(AtomicBool::new(true));
+    let publish_endpoint = format!("{}/v1/message", opts.publish_endpoint);
 
     let mut active_threads = vec![];
 
@@ -77,7 +78,7 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
             .spawn({
                 let running = running.clone();
                 let publish_interval = DEFAULT_NETWORK_CONFIGURATION_PUBLISH_INTERVAL;
-                let publish_endpoint = opts.publish_endpoint.clone();
+                let publish_endpoint = publish_endpoint.clone();
 
                 let client = reqwest::blocking::Client::new();
 
@@ -123,7 +124,6 @@ pub fn start(os_input: OsInputOutput, opts: Opt) {
                 let running = running.clone();
                 let network_utilization = network_utilization.clone();
                 let publish_interval = DEFAULT_NETWORK_UTILIZATION_PUBLISH_INTERVAL;
-                let publish_endpoint = opts.publish_endpoint;
 
                 let client = reqwest::blocking::Client::new();
 
