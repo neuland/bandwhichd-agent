@@ -1,0 +1,14 @@
+[Unit]
+Description=bandwhichd agent
+After=network-online.target
+Requires=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/sbin/bandwhichd-agent
+Environment="BANDWHICHD_SERVER=http://localhost:8080"
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

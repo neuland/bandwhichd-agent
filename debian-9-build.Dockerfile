@@ -1,4 +1,4 @@
-FROM debian:8-slim AS build
+FROM debian:9-slim AS build
 RUN set -eux; \
     apt update; \
     apt upgrade --yes; \
@@ -34,7 +34,7 @@ RUN set -eux; \
     . ./.cargo/env; \
     cargo build --package bandwhichd-agent --bin bandwhichd-agent --release
 
-FROM debian:8-slim AS package
+FROM debian:9-slim AS package
 RUN set -eux; \
     apt update; \
     apt upgrade --yes; \
@@ -42,11 +42,12 @@ RUN set -eux; \
     lintian \
     ;
 COPY --chown=root:root --from=build /home/build/target/release/bandwhichd-agent ./bandwhichd-agent/usr/sbin/bandwhichd-agent
-COPY --chown=root:root packaging/debian-8/files/ ./bandwhichd-agent
+COPY --chown=root:root packaging/debian-9/files/ ./bandwhichd-agent
 RUN dpkg-deb --build ./bandwhichd-agent
 RUN lintian  \
     --allow-root  \
     --info  \
     --suppress-tags binary-without-manpage  \
     --suppress-tags debian-changelog-file-missing  \
+    --suppress-tags maintainer-script-calls-systemctl  \
     bandwhichd-agent.deb
