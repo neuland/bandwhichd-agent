@@ -44,9 +44,10 @@ RUN set -eux; \
 COPY --chown=root:root --from=build /home/build/target/release/bandwhichd-agent ./bandwhichd-agent/usr/sbin/bandwhichd-agent
 COPY --chown=root:root packaging/debian-8/files/ ./bandwhichd-agent
 RUN dpkg-deb --build ./bandwhichd-agent
-RUN lintian  \
-    --allow-root  \
-    --info  \
-    --suppress-tags binary-without-manpage  \
-    --suppress-tags debian-changelog-file-missing  \
+RUN lintian \
+    --allow-root \
+    --info \
+    --suppress-tags binary-without-manpage \
+    --suppress-tags debian-changelog-file-missing \
+    --suppress-tags maintainer-script-calls-systemctl \
     bandwhichd-agent.deb

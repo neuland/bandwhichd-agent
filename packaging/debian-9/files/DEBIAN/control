@@ -1,5 +1,5 @@
 Package: bandwhichd-agent
-Version: 0.32.0-1+deb9
+Version: 0.32.0-2+deb8
 Section: utils
 Priority: optional
 Architecture: amd64

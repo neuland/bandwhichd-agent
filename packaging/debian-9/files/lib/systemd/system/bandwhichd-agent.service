@@ -6,7 +6,7 @@ Requires=network-online.target
 [Service]
 Type=notify
 ExecStart=/usr/sbin/bandwhichd-agent
-Environment="BANDWHICHD_SERVER=http://localhost:8080"
+EnvironmentFile=/etc/bandwhichd-agent/bandwhichd-agent.env
 Restart=always
 RestartSec=10
 
