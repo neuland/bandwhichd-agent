@@ -27,15 +27,15 @@ ADD --chown=build:build https://static.rust-lang.org/rustup/dist/x86_64-unknown-
 RUN set -eux; \
     chmod 755 ./rustup-init; \
     ./rustup-init -y
-COPY --chown=build:build Cargo.lock Cargo.toml ./
+COPY --chown=build:build Cargo.toml Cargo.lock ./
 RUN set -eux; \
     mkdir src; \
     echo 'fn main(){}' > src/main.rs; \
     . ./.cargo/env; \
     cargo build --package bandwhichd-agent --bin bandwhichd-agent --release; \
-    rm src/main.rs; \
+    rm src/main.rs target/release/deps/bandwhichd_agent*; \
     rmdir src
-COPY --chown=build:build src ./src/
+COPY --chown=build:build src ./src
 RUN set -eux; \
     . ./.cargo/env; \
     cargo build --package bandwhichd-agent --bin bandwhichd-agent --release

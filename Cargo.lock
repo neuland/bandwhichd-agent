@@ -59,7 +59,7 @@ dependencies = [
 
 [[package]]
 name = "bandwhichd-agent"
-version = "0.32.0"
+version = "0.34.0"
 dependencies = [
  "assert-json-diff",
  "failure",
