@@ -1,0 +1,14 @@
+[Unit]
+Description=bandwhichd agent
+After=network-online.target
+Requires=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/sbin/bandwhichd-agent
+EnvironmentFile=/etc/bandwhichd-agent/bandwhichd-agent.env
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

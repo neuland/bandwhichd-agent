@@ -69,7 +69,7 @@ pub fn start(server: String, os_input: OsInputOutput) {
     let systemd_enabled = libsystemd::daemon::booted();
     let agent_id = AgentId::default();
     let machine_id = MachineId::default();
-    let publish_endpoint = format!("{}/v1/message", server);
+    let publish_endpoint = format!("{}/v1/messages", server);
 
     let mut active_threads = vec![];
     let last_publish_network_configuration = Arc::new(Mutex::new(start));
