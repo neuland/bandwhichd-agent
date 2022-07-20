@@ -1,5 +1,5 @@
 Package: bandwhichd-agent
-Version: 0.34.0-1+deb8
+Version: 0.35.0-1
 Section: utils
 Priority: optional
 Architecture: amd64
@@ -7,4 +7,3 @@ Maintainer: neuland Open Source Maintainers <opensource@neuland-bfi.de>
 Description: bandwhichd agent publishing measurements
  Publish current information about the host, its network interfaces, sockets
  and network utilization to the bandwhichd monitoring system
-Depends: libc6, libssl1.0.0
