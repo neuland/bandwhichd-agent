@@ -24,8 +24,8 @@ RUN set -eux; \
     apt install --yes --no-install-recommends \
     lintian \
     ;
-COPY --chown=root:root --from=build /usr/src/bandwhichd-agent/target/x86_64-unknown-linux-musl/release/bandwhichd-agent ./bandwhichd-agent/usr/sbin/bandwhichd-agent
 COPY --chown=root:root packaging/debian/files/ ./bandwhichd-agent
+COPY --chown=root:root --from=build /usr/src/bandwhichd-agent/target/x86_64-unknown-linux-musl/release/bandwhichd-agent ./bandwhichd-agent/usr/sbin/bandwhichd-agent
 RUN dpkg-deb --build ./bandwhichd-agent
 RUN lintian \
     --allow-root \

@@ -1,0 +1,4 @@
+addFilter("bandwhichd-agent.x86_64: W: no-changelogname-tag")
+addFilter("bandwhichd-agent.x86_64: W: shared-lib-without-dependency-information /usr/sbin/bandwhichd-agent")
+addFilter("bandwhichd-agent.x86_64: W: summary-not-capitalized C bandwhichd agent publishing measurements")
+addFilter("bandwhichd-agent.x86_64: W: suse-missing-rclink bandwhichd-agent")
