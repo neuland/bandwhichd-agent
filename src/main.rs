@@ -7,14 +7,12 @@ use std::time::{Duration, Instant, SystemTime};
 
 use pnet::datalink::{DataLinkReceiver, NetworkInterface};
 
-use crate::agent_id::AgentId;
 use crate::machine_id::MachineId;
 use crate::network::{LocalSocket, Sniffer, Utilization};
 use crate::publish::{
     Message, NetworkConfigurationV1MeasurementMessage, NetworkUtilizationV1MeasurementMessage,
 };
 
-mod agent_id;
 mod machine_id;
 mod network;
 mod os;
@@ -67,7 +65,6 @@ fn abort() {
 pub fn start(server: String, os_input: OsInputOutput) {
     let start = Instant::now();
     let systemd_enabled = libsystemd::daemon::booted();
-    let agent_id = AgentId::default();
     let machine_id = MachineId::default();
     let publish_endpoint = format!("{}/v1/messages", server);
 
@@ -83,6 +80,7 @@ pub fn start(server: String, os_input: OsInputOutput) {
         thread::Builder::new()
             .name("publish_network_configuration_handler".to_string())
             .spawn({
+                let machine_id = machine_id.clone();
                 let last_publish_network_configuration = last_publish_network_configuration.clone();
                 let publish_interval = DEFAULT_NETWORK_CONFIGURATION_PUBLISH_INTERVAL;
                 let publish_endpoint = publish_endpoint.clone();
@@ -99,9 +97,8 @@ pub fn start(server: String, os_input: OsInputOutput) {
                     {
                         let message = Message::NetworkConfigurationV1Measurement(
                             NetworkConfigurationV1MeasurementMessage::from(
-                                agent_id,
-                                SystemTime::now(),
                                 machine_id.clone(),
+                                SystemTime::now(),
                                 gethostname::gethostname().into_string().unwrap(),
                                 pnet::datalink::interfaces(),
                                 open_sockets,
@@ -172,7 +169,10 @@ pub fn start(server: String, os_input: OsInputOutput) {
 
                         {
                             let message = Message::NetworkUtilizationV1Measurement(
-                                NetworkUtilizationV1MeasurementMessage::from(agent_id, utilization),
+                                NetworkUtilizationV1MeasurementMessage::from(
+                                    machine_id.clone(),
+                                    utilization,
+                                ),
                             );
                             let publish_result =
                                 client.post(publish_endpoint.clone()).json(&message).send();
