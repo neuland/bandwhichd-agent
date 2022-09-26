@@ -1,5 +1,5 @@
 Name:          bandwhichd-agent
-Version:       0.37.0
+Version:       0.38.0
 Release:       1
 License:       MIT
 Group:         System/Monitoring

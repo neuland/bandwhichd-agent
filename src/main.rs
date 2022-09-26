@@ -9,6 +9,7 @@ use pnet::datalink::{DataLinkReceiver, NetworkInterface};
 
 use crate::machine_id::MachineId;
 use crate::network::{LocalSocket, Sniffer, Utilization};
+use crate::os_release::OsRelease;
 use crate::publish::{
     Message, NetworkConfigurationV1MeasurementMessage, NetworkUtilizationV1MeasurementMessage,
 };
@@ -16,6 +17,7 @@ use crate::publish::{
 mod machine_id;
 mod network;
 mod os;
+mod os_release;
 mod publish;
 
 const DEFAULT_NETWORK_CONFIGURATION_PUBLISH_INTERVAL: Duration = Duration::from_secs(600);
@@ -66,6 +68,7 @@ pub fn start(server: String, os_input: OsInputOutput) {
     let start = Instant::now();
     let systemd_enabled = libsystemd::daemon::booted();
     let machine_id = MachineId::default();
+    let maybe_os_release = OsRelease::read().ok();
     let publish_endpoint = format!("{}/v1/messages", server);
 
     let mut active_threads = vec![];
@@ -99,6 +102,7 @@ pub fn start(server: String, os_input: OsInputOutput) {
                             NetworkConfigurationV1MeasurementMessage::from(
                                 machine_id.clone(),
                                 SystemTime::now(),
+                                maybe_os_release.clone(),
                                 gethostname::gethostname().into_string().unwrap(),
                                 pnet::datalink::interfaces(),
                                 open_sockets,

@@ -30,4 +30,4 @@ COPY --chown=root:root --from=build /usr/src/bandwhichd-agent/target/x86_64-unkn
 RUN set -eux; \
     rpmlint --file=/root/.rpmlintrc SPECS/bandwhichd-agent.spec; \
     rpmbuild -bb SPECS/bandwhichd-agent.spec; \
-    rpmlint --file=/root/.rpmlintrc RPMS/x86_64/bandwhichd-agent-0.37.0-1.x86_64.rpm
+    rpmlint --file=/root/.rpmlintrc RPMS/x86_64/bandwhichd-agent-0.38.0-1.x86_64.rpm

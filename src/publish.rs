@@ -8,7 +8,7 @@ use serde::{Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
 
 use crate::network::Protocol;
-use crate::{MachineId, OpenSockets, Utilization};
+use crate::{MachineId, OpenSockets, OsRelease, Utilization};
 
 #[derive(Serialize)]
 #[serde(tag = "type", content = "content")]
@@ -23,6 +23,7 @@ pub enum Message {
 pub struct NetworkConfigurationV1MeasurementMessage {
     pub machine_id: MachineId,
     pub timestamp: TimestampV1,
+    pub maybe_os_release: Option<OsRelease>,
     pub hostname: String,
     pub interfaces: Vec<InterfaceV1>,
     pub open_sockets: Vec<OpenSocketV1>,
@@ -32,6 +33,7 @@ impl NetworkConfigurationV1MeasurementMessage {
     pub fn from(
         machine_id: MachineId,
         timestamp: SystemTime,
+        maybe_os_release: Option<OsRelease>,
         hostname: String,
         network_interfaces: Vec<NetworkInterface>,
         open_sockets: OpenSockets,
@@ -58,6 +60,7 @@ impl NetworkConfigurationV1MeasurementMessage {
         NetworkConfigurationV1MeasurementMessage {
             hostname,
             machine_id,
+            maybe_os_release,
             timestamp: TimestampV1(timestamp.into()),
             interfaces,
             open_sockets,
@@ -165,6 +168,15 @@ impl Serialize for MachineId {
     }
 }
 
+impl Serialize for OsRelease {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.file_contents().serialize(serializer)
+    }
+}
+
 #[derive(Serialize, Ord, PartialOrd, Eq, PartialEq)]
 pub struct InterfaceV1 {
     pub name: String,
@@ -241,6 +253,7 @@ mod tests {
             NetworkConfigurationV1MeasurementMessage::from(
                 MachineId::new("<machine-id>".to_string()),
                 SystemTime::from(datetime!(2022-05-06 15:14:51.74223728 utc)),
+                Some(OsRelease::new("<os-release>".to_string())),
                 "some-host.example.com".to_string(),
                 vec![
                     NetworkInterface {
@@ -344,6 +357,7 @@ mod tests {
             "content": {
                 "machine_id": "d2c1d575-326e-b00b-c3eb-26ef934301f0",
                 "timestamp": "2022-05-06T15:14:51.74223728Z",
+                "maybe_os_release": "<os-release>",
                 "hostname": "some-host.example.com",
                 "interfaces": [
                     {
