@@ -1,21 +1,18 @@
 FROM --platform=linux/amd64 rust:slim AS build
 RUN set -eux; \
     apt update; \
-    apt upgrade --yes; \
-    apt install --yes --no-install-recommends \
-    musl-tools \
-    ;
-RUN rustup target add x86_64-unknown-linux-musl
+    apt upgrade --yes
+RUN rustup target add x86_64-unknown-linux-gnu
 WORKDIR /usr/src/bandwhichd-agent
 COPY Cargo.toml Cargo.lock ./
 RUN set -eux; \
     mkdir src; \
     echo 'fn main(){}' > src/main.rs; \
-    cargo build --package bandwhichd-agent --bin bandwhichd-agent --target x86_64-unknown-linux-musl --release; \
-    rm src/main.rs target/x86_64-unknown-linux-musl/release/deps/bandwhichd_agent*; \
+    RUSTFLAGS='-C target-feature=+crt-static' cargo build --package bandwhichd-agent --bin bandwhichd-agent --target x86_64-unknown-linux-gnu --release; \
+    rm src/main.rs target/x86_64-unknown-linux-gnu/release/deps/bandwhichd_agent*; \
     rmdir src
 COPY src ./src
-RUN cargo build --package bandwhichd-agent --bin bandwhichd-agent --target x86_64-unknown-linux-musl --release
+RUN RUSTFLAGS='-C target-feature=+crt-static' cargo build --package bandwhichd-agent --bin bandwhichd-agent --target x86_64-unknown-linux-gnu --release
 
 FROM --platform=linux/amd64 registry.suse.com/bci/bci-base:15.3 AS package
 RUN set -eux; \
@@ -26,7 +23,7 @@ RUN set -eux; \
 WORKDIR /usr/src/packages
 COPY --chown=root:root packaging/suse/.rpmlintrc packaging/suse/.rpmmacros /root/
 COPY --chown=root:root packaging/suse/files/ .
-COPY --chown=root:root --from=build /usr/src/bandwhichd-agent/target/x86_64-unknown-linux-musl/release/bandwhichd-agent BUILD/bandwhichd-agent
+COPY --chown=root:root --from=build /usr/src/bandwhichd-agent/target/x86_64-unknown-linux-gnu/release/bandwhichd-agent BUILD/bandwhichd-agent
 RUN set -eux; \
     rpmlint --file=/root/.rpmlintrc SPECS/bandwhichd-agent.spec; \
     rpmbuild -bb SPECS/bandwhichd-agent.spec; \

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-cargo build --package bandwhichd-agent --bin bandwhichd-agent --target x86_64-unknown-linux-musl --release
-cp target/x86_64-unknown-linux-musl/release/bandwhichd-agent bandwhichd-agent.0.38.0_amd64
+RUSTFLAGS='-C target-feature=+crt-static' cargo build --package bandwhichd-agent --bin bandwhichd-agent --target x86_64-unknown-linux-gnu --release
+cp target/x86_64-unknown-linux-gnu/release/bandwhichd-agent bandwhichd-agent.0.38.0_amd64
 
 docker image build --file build-debian-amd64.Dockerfile --tag bandwhichd-agent:debian .
 docker container create --name bandwhichd-agent-debian bandwhichd-agent:debian
